@@ -88,7 +88,7 @@ def generate_predictions_csv(weights_path, test_images_dir, test_annotations_dir
         print(f"Processed {min(i+batch_size, len(image_paths))} / {len(image_paths)} images")
 
     # 6. CSV 저장
-    df = pd.DataFrame(records)
+    df = pd.DataFrame(records, columns=['annotation_id', 'image_id', 'category_id', 'bbox_x', 'bbox_y', 'bbox_w', 'bbox_h', 'score'])
     df.to_csv(output_csv, index=False, encoding="utf-8-sig")
     print(f"✅ Prediction CSV saved to {output_csv} with {len(df)} bounding boxes.")
 
