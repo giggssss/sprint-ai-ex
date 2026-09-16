@@ -1,5 +1,6 @@
 import argparse
 import os
+import shutil
 import torch
 from ultralytics import YOLO
 
@@ -31,6 +32,7 @@ def run_training(args):
         mosaic=args.mosaic,
         mixup=args.mixup,
         fliplr=args.fliplr,
+        amp=False,
         save=True,
         plots=True,
         exist_ok=True,
@@ -38,6 +40,15 @@ def run_training(args):
 
     print("\n✅ 학습이 성공적으로 완료되었습니다!")
     run_dir = os.path.join(args.project, args.name)
+    best_pt_path = os.path.join(run_dir, "weights", "best.pt")
+    models_dir = "models"
+    os.makedirs(models_dir, exist_ok=True)
+    if os.path.exists(best_pt_path):
+        target_pt = os.path.join(models_dir, "best.pt")
+        shutil.copy2(best_pt_path, target_pt)
+        print(f"📁 가중치(best.pt) 파일 복사 완료: {target_pt}")
+    else:
+        print(f"⚠️ 학습된 가중치를 찾을 수 없습니다: {best_pt_path}")
     print(f"📁 결과 저장 경로: {run_dir}")
 
     # 3. 실험 로깅 및 자동 Markdown 보고서 갱신
