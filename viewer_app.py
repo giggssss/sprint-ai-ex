@@ -31,7 +31,13 @@ def load_class_mapping(mapping_path):
 def load_data(csv_path):
     if not os.path.exists(csv_path):
         return None
-    return pd.read_csv(csv_path)
+    try:
+        df = pd.read_csv(csv_path)
+        if df.empty and not list(df.columns):
+            return None
+        return df
+    except pd.errors.EmptyDataError:
+        return None
 
 @st.cache_data
 def get_image_list(img_dir):
@@ -118,7 +124,7 @@ if mode == "기존 테스트셋 조회 (CSV)":
                         pass
                     draw.text((x, y), text, fill="white")
                     
-            st.image(image, use_column_width=True, caption=f"Selected: {selected_filename} (Image ID: {target_image_id})")
+            st.image(image, use_container_width=True, caption=f"Selected: {selected_filename} (Image ID: {target_image_id})")
 
         with col2:
             st.subheader("예측 데이터 (CSV)")
@@ -184,7 +190,7 @@ elif mode == "직접 파일 업로드 (Live Inference)":
                         draw.text((x_min, y_min), text, fill="white")
                         
             with col1:
-                st.image(image, use_column_width=True, caption=f"Uploaded: {uploaded_file.name}")
+                st.image(image, use_container_width=True, caption=f"Uploaded: {uploaded_file.name}")
                 
             with col2:
                 st.write(f"탐지된 객체 수: {len(records)}")
