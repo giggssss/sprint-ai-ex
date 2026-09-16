@@ -1,0 +1,38 @@
+[
+  {
+    "run_name": "Baseline_YOLO11n",
+    "model_name": "yolo11n.pt",
+    "params": {
+      "epochs": 10,
+      "batch": 16,
+      "imgsz": 640,
+      "lr0": 0.01
+    },
+    "metrics": {
+      "mAP50": 0.785,
+      "mAP50-95": 0.542,
+      "Precision": 0.812,
+      "Recall": 0.745
+    },
+    "run_dir": "runs/detect/train_run"
+  },
+  {
+    "run_name": "Tuned_YOLO11s_Aug",
+    "model_name": "yolo11s.pt",
+    "params": {
+      "epochs": 30,
+      "batch": 16,
+      "imgsz": 640,
+      "lr0": 0.005,
+      "mosaic": 1.0,
+      "mixup": 0.15
+    },
+    "metrics": {
+      "mAP50": 0.892,
+      "mAP50-95": 0.678,
+      "Precision": 0.905,
+      "Recall": 0.862
+    },
+    "run_dir": "runs/detect/train_run"
+  }
+]
