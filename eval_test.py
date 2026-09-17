@@ -112,7 +112,7 @@ def generate_predictions_csv(weights_path, test_images_dir, test_annotations_dir
     print(f"✅ Prediction CSV saved to {output_csv} with {len(df)} bounding boxes.")
 
 if __name__ == "__main__":
-    WEIGHTS = "runs/detect/runs/detect/train_yolo_finetune_ssl/weights/best.pt"
+    WEIGHTS = "runs/detect/runs/detect/train_yolo11s_scratch_ssl/weights/best.pt"
     TEST_IMAGES = "/Volumes/Macintosh SUB/Dataset/sprint_ai_project1_data/test_images"
     TEST_ANNS = "/Volumes/Macintosh SUB/Dataset/sprint_ai_project1_data/test_annotations"
     CLASS_MAP = "class_mapping.json"

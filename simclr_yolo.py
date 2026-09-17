@@ -89,8 +89,8 @@ def main():
     dataset = UnlabeledImageDataset(image_paths, transform=SimCLRTransform(size=224))
     dataloader = DataLoader(dataset, batch_size=32, shuffle=True, num_workers=4, drop_last=True)
 
-    # Load YOLO model
-    yolo = YOLO('models/best.pt')
+    # Load YOLO model (from scratch YOLO11s)
+    yolo = YOLO('yolo11s.pt')
     yolo_model = yolo.model.to(device)
     
     # We will freeze the head and only train the backbone
@@ -122,8 +122,8 @@ def main():
         {'params': proj_head.parameters()}
     ], lr=1e-3)
 
-    epochs = 20
-    print("Starting SimCLR training...")
+    epochs = 50
+    print("Starting SimCLR training from scratch...")
     
     for epoch in range(epochs):
         yolo_model.train()
@@ -165,8 +165,8 @@ def main():
     print("Saving pretrained model...")
     hook_handle.remove() # Remove the hook so the model can be pickled
     yolo.ckpt['model'] = yolo_model.half() # Save model in fp16 as Ultralytics does
-    torch.save(yolo.ckpt, 'models/simclr_best.pt')
-    print("Saved pretrained model to models/simclr_best.pt")
+    torch.save(yolo.ckpt, 'models/simclr_scratch_yolo11s.pt')
+    print("Saved pretrained model to models/simclr_scratch_yolo11s.pt")
 
 if __name__ == '__main__':
     main()
