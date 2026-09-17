@@ -16,7 +16,7 @@ def main():
         help="Pipeline mode: prep (data check), train (train model), infer (run infer), report (gen report), all (full pipeline)",
     )
     # 데이터 관련 설정
-    parser.add_argument("--data", type=str, default="/Volumes/Macintosh SUB/Dataset/yolo_data/data.yaml", help="Path to data.yaml")
+    parser.add_argument("--data", type=str, default="/Volumes/Macintosh SUB/Dataset/yolo_data_v2/data.yaml", help="Path to data.yaml")
 
     # 학습 설정
     parser.add_argument("--model", type=str, default="yolo11n.pt", help="Ultralytics YOLO model name or path (default: yolo11n.pt)")

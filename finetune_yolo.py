@@ -9,12 +9,12 @@ def main():
     # Fine-tune the model. We don't freeze the backbone so it can adapt to the detection task,
     # but the rich representations learned via SSL will provide a massive head-start.
     model.train(
-        data='/Volumes/Macintosh SUB/Dataset/yolo_data/data.yaml',
+        data='/Volumes/Macintosh SUB/Dataset/yolo_data_v2/data.yaml',
         epochs=100, # 100 epochs since head is untrained
         batch=16,
         imgsz=640,
         project='runs/detect',
-        name='train_yolo11s_scratch_ssl',
+        name='train_yolo11s_v2_dataset',
         device='mps' # Use Apple Silicon
     )
     print("Fine-tuning complete. Best model saved in runs/detect/train_yolo_finetune_ssl/weights/best.pt")

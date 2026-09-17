@@ -111,11 +111,29 @@ def generate_predictions_csv(weights_path, test_images_dir, test_annotations_dir
     df.to_csv(output_csv, index=False, encoding="utf-8-sig")
     print(f"✅ Prediction CSV saved to {output_csv} with {len(df)} bounding boxes.")
 
+def check_map(weights_path):
+    print("\n--- Running Validation to calculate mAP@[0.75:0.95] ---")
+    model = YOLO(weights_path)
+    metrics = model.val(data='/Volumes/Macintosh SUB/Dataset/yolo_data/data.yaml', split='test')
+    if hasattr(metrics.box, 'all_ap'):
+        all_ap = metrics.box.all_ap
+        ap_75_95 = all_ap[:, 5:].mean(axis=1)
+        mAP_75_95 = ap_75_95.mean()
+        print("\n" + "="*50)
+        print(f"📊 mAP@[0.50:0.95] (기본): {metrics.box.map:.4f}")
+        print(f"📊 mAP@0.50 (기본): {metrics.box.map50:.4f}")
+        print(f"📊 mAP@0.75 (단일): {metrics.box.map75:.4f}")
+        print(f"🔥 mAP@[0.75:0.95] (엄격한 기준): {mAP_75_95:.4f}")
+        print("="*50 + "\n")
+    else:
+        print("Could not calculate mAP@[0.75:0.95]")
+
 if __name__ == "__main__":
-    WEIGHTS = "runs/detect/runs/detect/train_yolo11s_scratch_ssl/weights/best.pt"
+    WEIGHTS = "runs/detect/runs/detect/train_yolo11s_v2_dataset/weights/best.pt"
     TEST_IMAGES = "/Volumes/Macintosh SUB/Dataset/sprint_ai_project1_data/test_images"
     TEST_ANNS = "/Volumes/Macintosh SUB/Dataset/sprint_ai_project1_data/test_annotations"
     CLASS_MAP = "class_mapping.json"
     OUTPUT_CSV = "predictions.csv"
     
+    check_map(WEIGHTS)
     generate_predictions_csv(WEIGHTS, TEST_IMAGES, TEST_ANNS, CLASS_MAP, OUTPUT_CSV)
