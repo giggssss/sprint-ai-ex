@@ -6,6 +6,7 @@ import glob
 from PIL import Image, ImageDraw
 import random
 from ultralytics import YOLO
+import yaml
 
 st.set_page_config(page_title="Prediction Viewer", layout="wide")
 
@@ -28,6 +29,20 @@ def load_class_mapping(mapping_path):
     return {}
 
 @st.cache_data
+def get_dl_idx_to_name(data_yaml_path, mapping_path):
+    dl_idx_to_name = {}
+    if os.path.exists(data_yaml_path) and os.path.exists(mapping_path):
+        with open(data_yaml_path, "r", encoding="utf-8") as f:
+            yolo_names = yaml.safe_load(f).get("names", [])
+        with open(mapping_path, "r", encoding="utf-8") as f:
+            class_mapping = json.load(f)
+            
+        for yolo_idx_str, dl_idx in class_mapping.items():
+            yolo_idx = int(yolo_idx_str)
+            if yolo_idx < len(yolo_names):
+                dl_idx_to_name[dl_idx] = yolo_names[yolo_idx]
+    return dl_idx_to_name
+
 def load_data(csv_path):
     if not os.path.exists(csv_path):
         return None
@@ -55,11 +70,22 @@ CSV_PATH = "predictions.csv"
 TEST_IMG_DIR = "/Volumes/Macintosh SUB/Dataset/sprint_ai_project1_data/test_images"
 WEIGHTS_PATH = "models/best.pt"
 MAPPING_PATH = "class_mapping.json"
+DATA_YAML_PATH = "/Volumes/Macintosh SUB/Dataset/yolo_data/data.yaml"
+
+# 최적의 Confidence Threshold 읽어오기 (기본값 0.25)
+OPTIMAL_CONF = 0.25
+if os.path.exists("optimal_conf.txt"):
+    with open("optimal_conf.txt", "r") as f:
+        try:
+            OPTIMAL_CONF = float(f.read().strip())
+        except:
+            pass
 
 df = load_data(CSV_PATH)
 image_map = get_image_list(TEST_IMG_DIR)
 model = load_yolo_model(WEIGHTS_PATH)
 class_mapping = load_class_mapping(MAPPING_PATH)
+dl_idx_to_name = get_dl_idx_to_name(DATA_YAML_PATH, MAPPING_PATH)
 
 # 사이드바 모드 선택
 st.sidebar.header("설정")
@@ -94,7 +120,11 @@ if mode == "기존 테스트셋 조회 (CSV)":
         
         target_image_id = mapping.get(selected_filename)
         if target_image_id is None:
-            target_image_id = abs(hash(selected_filename)) % (10**8)
+            try:
+                target_image_id = int(os.path.splitext(selected_filename)[0])
+            except ValueError:
+                import hashlib
+                target_image_id = int(hashlib.md5(selected_filename.encode()).hexdigest(), 16) % (10**8)
             
         img_df = df[df['image_id'] == target_image_id]
         
@@ -129,7 +159,16 @@ if mode == "기존 테스트셋 조회 (CSV)":
         with col2:
             st.subheader("예측 데이터 (CSV)")
             st.write(f"탐지된 객체 수: {len(img_df)}")
-            st.dataframe(img_df)
+            
+            if not img_df.empty:
+                formatted_df = pd.DataFrame()
+                formatted_df['카테고리 아이디'] = img_df['category_id']
+                formatted_df['카테고리 이름'] = img_df['category_id'].map(dl_idx_to_name)
+                formatted_df['스코어'] = img_df['score']
+                formatted_df['박스'] = img_df.apply(lambda row: f"[{row['bbox_x']}, {row['bbox_y']}, {row['bbox_w']}, {row['bbox_h']}]", axis=1)
+                st.dataframe(formatted_df)
+            else:
+                st.dataframe(img_df)
             
             if st.button("전체 예측 결과(CSV) 보기"):
                 st.dataframe(df.head(100))
@@ -148,10 +187,9 @@ elif mode == "직접 파일 업로드 (Live Inference)":
             image = Image.open(uploaded_file).convert("RGB")
             
             # 추론
-            with st.spinner("모델 추론 중..."):
+            with st.spinner(f"모델 추론 중... (Threshold: {OPTIMAL_CONF:.4f}, Agnostic NMS, imgsz=960, TTA)"):
                 # YOLO는 PIL 이미지를 직접 입력받을 수 있습니다.
-                # 임시로 confidence threshold 값을 설정 (테스트용으로 0.01)
-                results = model.predict(image, conf=0.01, iou=0.6, device='cpu', verbose=False)
+                results = model.predict(image, conf=OPTIMAL_CONF, iou=0.45, agnostic_nms=True, imgsz=960, augment=True, device='cpu', verbose=False)
                 
             draw = ImageDraw.Draw(image)
             records = []
@@ -195,6 +233,12 @@ elif mode == "직접 파일 업로드 (Live Inference)":
             with col2:
                 st.write(f"탐지된 객체 수: {len(records)}")
                 if records:
-                    st.dataframe(pd.DataFrame(records))
+                    live_df = pd.DataFrame(records)
+                    formatted_live = pd.DataFrame()
+                    formatted_live['카테고리 아이디'] = live_df['category_id']
+                    formatted_live['카테고리 이름'] = live_df['category_id'].map(dl_idx_to_name)
+                    formatted_live['스코어'] = live_df['score']
+                    formatted_live['박스'] = live_df.apply(lambda row: f"[{row['bbox_x']}, {row['bbox_y']}, {row['bbox_w']}, {row['bbox_h']}]", axis=1)
+                    st.dataframe(formatted_live)
                 else:
                     st.info("탐지된 객체가 없습니다. (Confidence Threshold 0.01 기준)")

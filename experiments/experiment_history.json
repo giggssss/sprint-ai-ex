@@ -34,5 +34,33 @@
       "Recall": 0.862
     },
     "run_dir": "runs/detect/train_run"
+  },
+  {
+    "run_name": "train_yolo",
+    "model_name": "models/best.pt",
+    "params": {
+      "model": "models/best.pt",
+      "data": "/Volumes/Macintosh SUB/Dataset/yolo_data/data.yaml",
+      "epochs": 100,
+      "batch": 16,
+      "imgsz": 640,
+      "lr0": 0.01,
+      "device": "mps",
+      "project": "runs/detect",
+      "name": "train_yolo",
+      "mosaic": 1.0,
+      "mixup": 0.15,
+      "fliplr": 0.5,
+      "tune": false,
+      "tune_epochs": 5,
+      "tune_iters": 10
+    },
+    "metrics": {
+      "mAP50": 0.9424,
+      "mAP50-95": 0.9291,
+      "Precision": 0.887,
+      "Recall": 0.8939
+    },
+    "run_dir": "runs/detect/train_yolo"
   }
 ]

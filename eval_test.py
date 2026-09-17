@@ -46,15 +46,34 @@ def generate_predictions_csv(weights_path, test_images_dir, test_annotations_dir
     # 5. 추론 수행
     # 추론은 배치로 수행하는 것이 빠름
     batch_size = 16
+    
+    # 최적의 Confidence Threshold 읽어오기 (기본값 0.25)
+    conf_threshold = 0.25
+    if os.path.exists("optimal_conf.txt"):
+        with open("optimal_conf.txt", "r") as f:
+            try:
+                conf_threshold = float(f.read().strip())
+                print(f"Using Optimal Confidence Threshold: {conf_threshold:.4f}")
+            except:
+                pass
+                
     for i in range(0, len(image_paths), batch_size):
         batch_paths = image_paths[i:i+batch_size]
         # device='cpu' to avoid MPS issues if any, or just let ultralytics decide
-        results = model.predict(source=batch_paths, conf=0.01, iou=0.6, device='cpu', verbose=False)
+        # Added agnostic_nms=True and lowered iou to 0.45 to perform stricter NMS across all classes
+        results = model.predict(source=batch_paths, conf=conf_threshold, iou=0.45, agnostic_nms=True, imgsz=960, augment=True, device='cpu', verbose=False)
         
         for r, img_path in zip(results, batch_paths):
             filename = os.path.basename(img_path)
-            # 매핑된 ID가 없으면 임의의 ID 부여(안전장치)
-            image_id = filename_to_image_id.get(filename, abs(hash(filename)) % (10**8))
+            # 매핑된 ID가 없으면 파일명에서 숫자 추출, 실패 시 해시 기반 고정 ID
+            if filename in filename_to_image_id:
+                image_id = filename_to_image_id[filename]
+            else:
+                try:
+                    image_id = int(os.path.splitext(filename)[0])
+                except ValueError:
+                    import hashlib
+                    image_id = int(hashlib.md5(filename.encode()).hexdigest(), 16) % (10**8)
             
             boxes = r.boxes
             if boxes is not None and len(boxes) > 0:
