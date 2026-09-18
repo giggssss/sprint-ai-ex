@@ -28,6 +28,6 @@ To achieve the user's target of 90% mAP, the next agent must focus purely on **T
 5. **Class Imbalance:** Implement Class Weights (Focal Loss) to further boost rare classes like '카나브정'.
 
 ## 4. Key Files to Know
-- `utils/data_prep.py`: Contains the fixed Stratified Split logic.
-- `eval_ood_test.py`: The crown jewel of the OOD rejection pipeline (uses k-NN Feature Bank).
-- `finetune_yolo.py`: The entry point for training (needs hyperparameters updated for the next steps).
+- `utils/data_prep.py`: Contains the fixed Stratified Split logic and mapping utilities.
+- `evaluate.py` / `utils/evaluator.py`: The crown jewel of the OOD rejection pipeline (uses k-NN Feature Bank) and mAP@[0.75:0.95] evaluation.
+- `train.py`: The entry point for training (supports both scratch and fine-tuning with hyperparameters).

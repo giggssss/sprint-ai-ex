@@ -1,6 +1,29 @@
+# Byte-compiled / optimized / ambient files
 __pycache__/
+*.py[cod]
+*$py.class
 *.pyc
+
+# OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDEs
 .vscode/
+.idea/
+
+# YOLO & Training artifacts
 runs/
 *.pt
+
+# Intermediate sweep predictions & large local dataset copies
+experiments/sweeps/
+test_coco.json
+
+# Ghost duplicate files
+* (*).py

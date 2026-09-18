@@ -1,139 +1,62 @@
+"""
+테스트셋 평가 및 제출용 CSV 생성 스크립트 (하위 호환 래퍼)
+통합된 utils.evaluator.YOLOEvaluator 모듈을 호출합니다.
+"""
 import os
-import glob
-import json
-import pandas as pd
-from ultralytics import YOLO
+import config
+from utils.evaluator import YOLOEvaluator
 
-def generate_predictions_csv(weights_path, test_images_dir, test_annotations_dir, class_mapping_path, output_csv):
-    """
-    테스트 이미지들에 대해 YOLO 모델 추론을 수행하고,
-    original dl_idx(오리지널 약품코드)로 클래스를 매핑하여 지정된 포맷의 CSV를 생성합니다.
-    """
-    # 1. 모델 로드
-    if not os.path.exists(weights_path):
-        raise FileNotFoundError(f"Model weights not found: {weights_path}")
-    print(f"Loading YOLO model from {weights_path}...")
-    model = YOLO(weights_path)
-    
-    # 2. 클래스 매핑 로드 (yolo class index -> original dl_idx)
-    with open(class_mapping_path, "r", encoding="utf-8") as f:
-        class_mapping = json.load(f)
-        
-    # 3. 이미지 ID 매핑 생성 (filename -> image_id)
-    # JSON에서 image_id 추출
-    filename_to_image_id = {}
-    json_files = glob.glob(os.path.join(test_annotations_dir, "**", "*.json"), recursive=True)
-    for jf in json_files:
-        with open(jf, "r", encoding="utf-8") as f:
-            try:
-                data = json.load(f)
-                for img in data.get("images", []):
-                    fn = img.get("file_name")
-                    img_id = img.get("id")
-                    if fn and img_id is not None:
-                        filename_to_image_id[fn] = img_id
-            except Exception:
-                pass
-                
-    # 4. 테스트 이미지 로드
-    image_paths = glob.glob(os.path.join(test_images_dir, "*.png")) + \
-                  glob.glob(os.path.join(test_images_dir, "*.jpg"))
-    print(f"Found {len(image_paths)} test images.")
-    
-    records = []
-    annotation_id = 1
-    
-    # 5. 추론 수행
-    # 추론은 배치로 수행하는 것이 빠름
-    batch_size = 16
-    
-    # 최적의 Confidence Threshold 읽어오기 (기본값 0.25)
-    conf_threshold = 0.25
-    if os.path.exists("optimal_conf.txt"):
-        with open("optimal_conf.txt", "r") as f:
-            try:
-                conf_threshold = float(f.read().strip())
-                print(f"Using Optimal Confidence Threshold: {conf_threshold:.4f}")
-            except:
-                pass
-                
-    for i in range(0, len(image_paths), batch_size):
-        batch_paths = image_paths[i:i+batch_size]
-        # device='cpu' to avoid MPS issues if any, or just let ultralytics decide
-        # Added agnostic_nms=True and lowered iou to 0.45 to perform stricter NMS across all classes
-        results = model.predict(source=batch_paths, conf=conf_threshold, iou=0.45, agnostic_nms=True, imgsz=960, augment=True, device='cpu', verbose=False)
-        
-        for r, img_path in zip(results, batch_paths):
-            filename = os.path.basename(img_path)
-            # 매핑된 ID가 없으면 파일명에서 숫자 추출, 실패 시 해시 기반 고정 ID
-            if filename in filename_to_image_id:
-                image_id = filename_to_image_id[filename]
-            else:
-                try:
-                    image_id = int(os.path.splitext(filename)[0])
-                except ValueError:
-                    import hashlib
-                    image_id = int(hashlib.md5(filename.encode()).hexdigest(), 16) % (10**8)
-            
-            boxes = r.boxes
-            if boxes is not None and len(boxes) > 0:
-                for box in boxes:
-                    yolo_cls_id = int(box.cls[0].item())
-                    # 원래 약품 코드로 변환
-                    original_dl_idx = class_mapping.get(str(yolo_cls_id), yolo_cls_id)
-                    
-                    conf = float(box.conf[0].item())
-                    # bbox: [x, y, w, h] 포맷
-                    # YOLO xywh는 center x, center y 기반이므로 xyxy에서 변환
-                    xyxy = box.xyxy[0].cpu().numpy().tolist()
-                    x_min, y_min, x_max, y_max = xyxy
-                    bbox_x = x_min
-                    bbox_y = y_min
-                    bbox_w = x_max - x_min
-                    bbox_h = y_max - y_min
-                    
-                    records.append({
-                        "annotation_id": annotation_id,
-                        "image_id": image_id,
-                        "category_id": original_dl_idx,
-                        "bbox_x": round(bbox_x, 2),
-                        "bbox_y": round(bbox_y, 2),
-                        "bbox_w": round(bbox_w, 2),
-                        "bbox_h": round(bbox_h, 2),
-                        "score": round(conf, 4)
-                    })
-                    annotation_id += 1
-                    
-        print(f"Processed {min(i+batch_size, len(image_paths))} / {len(image_paths)} images")
 
-    # 6. CSV 저장
-    df = pd.DataFrame(records, columns=['annotation_id', 'image_id', 'category_id', 'bbox_x', 'bbox_y', 'bbox_w', 'bbox_h', 'score'])
-    df.to_csv(output_csv, index=False, encoding="utf-8-sig")
-    print(f"✅ Prediction CSV saved to {output_csv} with {len(df)} bounding boxes.")
+def generate_predictions_csv(
+    weights_path: str = None,
+    test_images_dir: str = config.TEST_IMAGES_DEFAULT,
+    test_annotations_dir: str = None,
+    class_mapping_path: str = config.CLASS_MAPPING_FILE,
+    output_csv: str = config.DEFAULT_PREDICTIONS_CSV,
+    conf_threshold: float = None,
+):
+    """지정된 가중치를 사용하여 테스트 이미지 예측을 수행하고 CSV로 저장합니다."""
+    evaluator = YOLOEvaluator(weights_path=weights_path, class_mapping_path=class_mapping_path)
+    return evaluator.predict_test_set(
+        test_images_dir=test_images_dir,
+        test_annotations_path=test_annotations_dir,
+        output_csv=output_csv,
+        conf_threshold=conf_threshold,
+    )
 
-def check_map(weights_path):
-    print("\n--- Running Validation to calculate mAP@[0.75:0.95] ---")
-    model = YOLO(weights_path)
-    metrics = model.val(data='/Volumes/Macintosh SUB/Dataset/yolo_data/data.yaml', split='test')
-    if hasattr(metrics.box, 'all_ap'):
+
+def evaluate_predictions_coco(
+    csv_path: str = config.DEFAULT_PREDICTIONS_CSV,
+    annotations_path: str = None,
+):
+    """pycocotools를 사용하여 생성된 CSV 파일의 mAP@[0.75:0.95]를 산출합니다."""
+    evaluator = YOLOEvaluator()
+    metrics = evaluator.evaluate_coco(predictions_csv=csv_path, annotations_path=annotations_path)
+    return metrics.get("mAP75-95", 0.0)
+
+
+def check_map(weights_path: str = None):
+    """YOLO validation 내장 기능을 통해 mAP 지표를 확인합니다."""
+    from ultralytics import YOLO
+
+    w = config.resolve_weights(weights_path)
+    model = YOLO(w)
+    metrics = model.val(data=config.DATA_YAML_DEFAULT, split="val")
+    mAP_75_95 = 0.0
+    if hasattr(metrics.box, "all_ap") and metrics.box.all_ap is not None:
         all_ap = metrics.box.all_ap
-        ap_75_95 = all_ap[:, 5:].mean(axis=1)
-        mAP_75_95 = ap_75_95.mean()
-        print("\n" + "="*50)
-        print(f"📊 mAP@[0.50:0.95] (기본): {metrics.box.map:.4f}")
-        print(f"📊 mAP@0.50 (기본): {metrics.box.map50:.4f}")
-        print(f"📊 mAP@0.75 (단일): {metrics.box.map75:.4f}")
-        print(f"🔥 mAP@[0.75:0.95] (엄격한 기준): {mAP_75_95:.4f}")
-        print("="*50 + "\n")
-    else:
-        print("Could not calculate mAP@[0.75:0.95]")
+        if len(all_ap.shape) >= 2 and all_ap.shape[1] > 5:
+            mAP_75_95 = float(all_ap[:, 5:].mean())
+    print(f"🔥 mAP@[0.75:0.95]: {mAP_75_95:.4f}")
+    return mAP_75_95
+
 
 if __name__ == "__main__":
-    WEIGHTS = "runs/detect/runs/detect/train_yolo11s_v2_dataset/weights/best.pt"
-    TEST_IMAGES = "/Volumes/Macintosh SUB/Dataset/sprint_ai_project1_data/test_images"
-    TEST_ANNS = "/Volumes/Macintosh SUB/Dataset/sprint_ai_project1_data/test_annotations"
-    CLASS_MAP = "class_mapping.json"
-    OUTPUT_CSV = "predictions.csv"
-    
-    check_map(WEIGHTS)
-    generate_predictions_csv(WEIGHTS, TEST_IMAGES, TEST_ANNS, CLASS_MAP, OUTPUT_CSV)
+    weights = config.resolve_weights()
+    anns = config.resolve_test_annotations()
+    output_csv = config.DEFAULT_PREDICTIONS_CSV
+
+    print(f"🚀 Running Evaluation with weights: {weights}")
+    check_map(weights)
+    generate_predictions_csv(weights_path=weights, test_annotations_dir=anns, output_csv=output_csv)
+    evaluate_predictions_coco(csv_path=output_csv, annotations_path=anns)

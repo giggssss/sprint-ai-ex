@@ -1,9 +1,11 @@
 import os
 import argparse
 import shutil
-import torch
 import yaml
+import torch
 from ultralytics import YOLO
+
+import config
 
 
 def run_training(args):
@@ -15,36 +17,34 @@ def run_training(args):
     print(f"  • Batch Size    : {args.batch}")
     print(f"  • Image Size    : {args.imgsz}")
     print(f"  • Device        : {args.device}")
-    
+
     hyperparameters = {}
-    
+
     # [1] 하이퍼파라미터 튜닝 로직
-    if args.tune:
+    if getattr(args, "tune", False):
         print("=" * 60)
         print(f"🔬 하이퍼파라미터 튜닝 모드 활성화 (Epochs: {args.tune_epochs}, Iters: {args.tune_iters})")
         print("=" * 60)
         tune_model = YOLO(args.model)
-        
-        # tune 실행 (runs/detect/tune 에 결과가 저장됨)
+
         tune_model.tune(
             data=args.data,
             epochs=args.tune_epochs,
             iterations=args.tune_iters,
-            optimizer='AdamW',
+            optimizer="AdamW",
             plots=False,
             save=False,
             val=False,
             device=args.device,
-            amp=False
+            amp=False,
         )
-        
-        # tune 결과 불러오기
+
         tune_dir = os.path.join(args.project, "tune")
         best_hp_path = os.path.join(tune_dir, "best_hyperparameters.yaml")
-        
+
         if os.path.exists(best_hp_path):
             print(f"\n🌟 최적의 하이퍼파라미터를 찾았습니다: {best_hp_path}")
-            with open(best_hp_path, 'r', encoding='utf-8') as f:
+            with open(best_hp_path, "r", encoding="utf-8") as f:
                 hyperparameters = yaml.safe_load(f)
             print(hyperparameters)
         else:
@@ -53,11 +53,9 @@ def run_training(args):
     print("=" * 60)
     print("🎯 최종 학습(Main Training) 시작")
     print("=" * 60)
-    
-    # 2. 모델 로드 (Pretrained Weights) - 새로 인스턴스화
+
     model = YOLO(args.model)
 
-    # 3. 기본 인자 설정
     train_kwargs = {
         "data": args.data,
         "epochs": args.epochs,
@@ -72,10 +70,8 @@ def run_training(args):
         "plots": True,
         "exist_ok": True,
     }
-    
-    # 4. 하이퍼파라미터 병합 (튜닝 결과가 있다면 덮어쓰기)
-    if not args.tune:
-        # 튜닝이 아닐 때만 명령줄 기본 인자 사용
+
+    if not getattr(args, "tune", False):
         train_kwargs.update({
             "lr0": args.lr0,
             "mosaic": args.mosaic,
@@ -83,16 +79,14 @@ def run_training(args):
             "fliplr": args.fliplr,
         })
     else:
-        # 튜닝 결과 병합
         train_kwargs.update(hyperparameters)
 
-    # 5. 학습 실행
     results = model.train(**train_kwargs)
 
     print("\n✅ 학습이 성공적으로 완료되었습니다!")
     run_dir = os.path.join(args.project, args.name)
     best_pt_path = os.path.join(run_dir, "weights", "best.pt")
-    models_dir = "models"
+    models_dir = os.path.join(config.BASE_DIR, "models")
     os.makedirs(models_dir, exist_ok=True)
     if os.path.exists(best_pt_path):
         target_pt = os.path.join(models_dir, "best.pt")
@@ -102,19 +96,27 @@ def run_training(args):
         print(f"⚠️ 학습된 가중치를 찾을 수 없습니다: {best_pt_path}")
     print(f"📁 결과 저장 경로: {run_dir}")
 
-    # 6. 실험 로깅 및 자동 Markdown 보고서 갱신
+    # 실험 로깅 및 자동 Markdown 보고서 갱신
     try:
         from utils.experiment_manager import ExperimentTracker, ReportGenerator
+
         tracker = ExperimentTracker()
 
+        map75_95 = 0.0
+        if hasattr(results.box, "all_ap") and results.box.all_ap is not None:
+            all_ap = results.box.all_ap
+            if len(all_ap.shape) >= 2 and all_ap.shape[1] > 5:
+                map75_95 = float(all_ap[:, 5:].mean())
+
         val_metrics = {
+            "mAP75-95": round(map75_95, 4),
+            "mAP75": round(float(getattr(results.box, "map75", 0.0)), 4),
             "mAP50": round(float(getattr(results.box, "map50", 0.0)), 4),
             "mAP50-95": round(float(getattr(results.box, "map", 0.0)), 4),
             "Precision": round(float(getattr(results.box, "mp", 0.0)), 4),
             "Recall": round(float(getattr(results.box, "mr", 0.0)), 4),
         }
 
-        # 튜닝된 파라미터가 있다면 로깅에 추가
         log_params = vars(args).copy()
         if hyperparameters:
             log_params.update(hyperparameters)
@@ -137,33 +139,31 @@ def run_training(args):
 
 
 def main():
-    default_device = "mps" if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu")
-
     parser = argparse.ArgumentParser(description="Ultralytics YOLO Object Detection Training & Tuning")
     parser.add_argument("--model", type=str, default="yolo11n.pt", help="Ultralytics model name or path")
-    parser.add_argument("--data", type=str, default="/Volumes/Macintosh SUB/Dataset/yolo_data/data.yaml", help="Path to data.yaml")
+    parser.add_argument("--data", type=str, default=config.DATA_YAML_DEFAULT, help=f"Path to data.yaml (default: {config.DATA_YAML_DEFAULT})")
     parser.add_argument("--epochs", type=int, default=30, help="Number of final training epochs (default: 30)")
     parser.add_argument("--batch", type=int, default=16, help="Batch size (default: 16)")
     parser.add_argument("--imgsz", type=int, default=640, help="Input image size (default: 640)")
     parser.add_argument("--lr0", type=float, default=0.01, help="Initial learning rate (default: 0.01)")
-    parser.add_argument("--device", type=str, default=default_device, help=f"Computation device (default: {default_device})")
+    parser.add_argument("--device", type=str, default=config.DEVICE, help=f"Computation device (default: {config.DEVICE})")
     parser.add_argument("--project", type=str, default="runs/detect", help="Project output directory")
     parser.add_argument("--name", type=str, default="train_yolo", help="Training run name")
     parser.add_argument("--mosaic", type=float, default=1.0, help="Mosaic augmentation probability")
     parser.add_argument("--mixup", type=float, default=0.15, help="Mixup augmentation probability")
     parser.add_argument("--fliplr", type=float, default=0.5, help="Flip left-right probability")
-    
-    # 튜닝 관련 파라미터 추가
+
+    # 튜닝 관련 파라미터
     parser.add_argument("--tune", action="store_true", help="Enable hyperparameter tuning before final training")
     parser.add_argument("--tune_epochs", type=int, default=5, help="Number of epochs per tuning iteration (default: 5)")
     parser.add_argument("--tune_iters", type=int, default=10, help="Number of tuning iterations/trials (default: 10)")
 
     args = parser.parse_args()
-    
-    if args.device == 'mps' and not torch.backends.mps.is_available():
+
+    if args.device == "mps" and not torch.backends.mps.is_available():
         print("MPS is requested but not available. Falling back to CPU.")
-        args.device = 'cpu'
-        
+        args.device = "cpu"
+
     run_training(args)
 
 

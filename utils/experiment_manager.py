@@ -73,6 +73,8 @@ class ReportGenerator:
             {
                 "run_name": h["run_name"],
                 "model_name": h["model_name"],
+                "mAP75-95": h["metrics"].get("mAP75-95", 0.0),
+                "mAP75": h["metrics"].get("mAP75", 0.0),
                 "mAP50": h["metrics"].get("mAP50", 0.0),
                 "mAP50-95": h["metrics"].get("mAP50-95", 0.0),
                 "Precision": h["metrics"].get("Precision", 0.0),
@@ -149,8 +151,8 @@ class ReportGenerator:
         chart_paths = self.generate_charts()
         report_path = os.path.join(self.exp_dir, report_filename)
 
-        # 최고의 성능을 낸 모델 탐색
-        best_run = max(history, key=lambda h: h["metrics"].get("mAP50-95", 0.0))
+        # 최고의 성능을 낸 모델 탐색 (mAP75-95 우선, 없으면 mAP50-95)
+        best_run = max(history, key=lambda h: h["metrics"].get("mAP75-95", h["metrics"].get("mAP50-95", 0.0)))
 
         # Markdown 내용 조립
         md = []
@@ -159,14 +161,15 @@ class ReportGenerator:
 
         md.append("## 🏆 1. Best Model Executive Summary\n")
         md.append(f"- **최적 모델 (Best Run)**: `{best_run['run_name']}` ({best_run['model_name']})")
-        md.append(f"- **mAP@0.5**: **`{best_run['metrics'].get('mAP50', 0.0):.4f}`**")
-        md.append(f"- **mAP@0.5:0.95**: **`{best_run['metrics'].get('mAP50-95', 0.0):.4f}`**")
+        md.append(f"- **mAP@[0.75:0.95] (Target Standard)**: **`{best_run['metrics'].get('mAP75-95', 0.0):.4f}`**")
+        md.append(f"- **mAP@0.75**: **`{best_run['metrics'].get('mAP75', 0.0):.4f}`**")
+        md.append(f"- **mAP@0.5**: `{best_run['metrics'].get('mAP50', 0.0):.4f}`")
         md.append(f"- **Precision**: `{best_run['metrics'].get('Precision', 0.0):.4f}` | **Recall**: `{best_run['metrics'].get('Recall', 0.0):.4f}`\n")
 
         md.append("---")
         md.append("## 📊 2. 실험 결과 비교 표 (Benchmark Metrics)\n")
-        md.append("| 실험명 (Run) | 모델명 | Epochs | Img Size | mAP@0.5 | mAP@0.5:0.95 | Precision | Recall |")
-        md.append("| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |")
+        md.append("| 실험명 (Run) | 모델명 | Epochs | Img Size | mAP@[0.75:0.95] | mAP@0.75 | mAP@0.5 | Precision | Recall |")
+        md.append("| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |")
 
         for h in history:
             p = h["params"]
@@ -174,7 +177,7 @@ class ReportGenerator:
             is_best = "⭐ " if h["run_name"] == best_run["run_name"] else ""
             md.append(
                 f"| {is_best}**{h['run_name']}** | `{h['model_name']}` | {p.get('epochs', '-')} | {p.get('imgsz', '-')} | "
-                f"**{m.get('mAP50', 0.0):.4f}** | **{m.get('mAP50-95', 0.0):.4f}** | {m.get('Precision', 0.0):.4f} | {m.get('Recall', 0.0):.4f} |"
+                f"**{m.get('mAP75-95', 0.0):.4f}** | {m.get('mAP75', 0.0):.4f} | {m.get('mAP50', 0.0):.4f} | {m.get('Precision', 0.0):.4f} | {m.get('Recall', 0.0):.4f} |"
             )
 
         md.append("\n---")
