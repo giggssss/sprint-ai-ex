@@ -241,7 +241,8 @@ class YOLOEvaluator:
             coco_eval_standard.params.catIds = known_coco_ids
         coco_eval_standard.evaluate()
         coco_eval_standard.accumulate()
-        map50 = float(coco_eval_standard.stats[1])
+        coco_eval_standard.summarize()
+        map50 = float(coco_eval_standard.stats[1]) if len(coco_eval_standard.stats) > 1 else 0.0
 
         print("=" * 60)
         print(f"🎯 [공식 타겟 기준] mAP@[0.75:0.95]: {mAP_75_95:.4f}")
